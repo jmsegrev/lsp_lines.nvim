@@ -79,7 +79,27 @@ function M.show(namespace, bufnr, diagnostics, opts, source)
   local line_stacks = {}
   local prev_lnum = -1
   local prev_col = 0
+
   for _, diagnostic in ipairs(diagnostics) do
+    local bfrline = vim.api.nvim_buf_get_lines(bufnr, diagnostic.lnum, diagnostic.lnum + 1, false)[1]
+    if #bfrline + #diagnostic.message < 100 or opts.virtual_lines.single_line then
+
+      local msg;
+      if diagnostic.code then
+        msg = string.format("%s [%s]", diagnostic.message, diagnostic.code)
+      else
+        msg = diagnostic.message
+      end
+      vim.api.nvim_buf_set_extmark(
+        bufnr,
+        namespace,
+        diagnostic.lnum,
+        diagnostic.col,
+        { virt_text = { { "──── " .. msg, highlight_groups[diagnostic.severity] } } }
+      )
+      goto skip
+    end
+
     if line_stacks[diagnostic.lnum] == nil then
       line_stacks[diagnostic.lnum] = {}
     end
@@ -108,10 +128,12 @@ function M.show(namespace, bufnr, diagnostics, opts, source)
 
     prev_lnum = diagnostic.lnum
     prev_col = diagnostic.col
+    ::skip::
   end
 
   for lnum, lelements in pairs(line_stacks) do
     local virt_lines = {}
+    local virt_text = {}
 
     -- We read in the order opposite to insertion because the last
     -- diagnostic for a real line, is rendered upstairs from the
@@ -181,13 +203,12 @@ function M.show(namespace, bufnr, diagnostics, opts, source)
 
         local msg
         if diagnostic.code then
-          msg = string.format("%s: %s", diagnostic.code, diagnostic.message)
+          msg = string.format("%s [%s]", diagnostic.message, diagnostic.code)
         else
           msg = diagnostic.message
         end
 
         for msg_line in msg:gmatch("([^\n]+)") do
-
           local create_line = function(message)
             local line = {}
             vim.list_extend(line, left)
@@ -214,7 +235,7 @@ function M.show(namespace, bufnr, diagnostics, opts, source)
               table.insert(virt_lines, create_line("..."))
             else
               table.insert(virt_lines, create_line("-"))
-          end
+            end
           end
 
           if opts.virtual_lines.short_diagnostic then
