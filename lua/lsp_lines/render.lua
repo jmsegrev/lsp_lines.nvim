@@ -45,7 +45,9 @@ end
 ---@param opts boolean|Opts
 ---@param source 'native'|'coc'|nil If nil, defaults to 'native'.
 function M.show(namespace, bufnr, diagnostics, opts, source)
-  if not vim.api.nvim_buf_is_loaded(bufnr) then return end
+  if not vim.api.nvim_buf_is_loaded(bufnr) then
+    return
+  end
   vim.validate({
     namespace = { namespace, "n" },
     bufnr = { bufnr, "n" },
@@ -183,19 +185,40 @@ function M.show(namespace, bufnr, diagnostics, opts, source)
         else
           msg = diagnostic.message
         end
+
         for msg_line in msg:gmatch("([^\n]+)") do
-          local vline = {}
-          vim.list_extend(vline, left)
-          vim.list_extend(vline, center)
-          vim.list_extend(vline, { { msg_line, highlight_groups[diagnostic.severity] } })
 
-          table.insert(virt_lines, vline)
-
-          -- Special-case for continuation lines:
-          if overlap then
-            center = { { "│", highlight_groups[diagnostic.severity] }, { "     ", empty_space_hi } }
+          local create_line = function(message)
+            local line = {}
+            vim.list_extend(line, left)
+            vim.list_extend(line, center)
+            table.insert(line, { message, highlight_groups[diagnostic.severity] })
+            if overlap then
+              center = { { "│", highlight_groups[diagnostic.severity] }, { "     ", empty_space_hi } }
+            else
+              center = { { "      ", empty_space_hi } }
+            end
+            return line
+          end
+          -- trim message to not have indentation
+          msg_line = msg_line:match("^%s*(.-)%s*$")
+          -- vim.list_extend(vline, { { msg_line, highlight_groups[diagnostic.severity] } })
+          -- table.insert(virt_lines, vline)
+          if #msg_line < 80 then
+            table.insert(virt_lines, create_line(msg_line))
           else
-            center = { { "      ", empty_space_hi } }
+            for msg_part in msg_line:gmatch("(.-)'") do
+              table.insert(virt_lines, create_line(msg_part:match("^%s*(.-)%s*$")))
+            end
+            if opts.virtual_lines.short_diagnostic then
+              table.insert(virt_lines, create_line("..."))
+            else
+              table.insert(virt_lines, create_line("-"))
+          end
+          end
+
+          if opts.virtual_lines.short_diagnostic then
+            break
           end
         end
       end

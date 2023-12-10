@@ -23,6 +23,8 @@ end
 ---@class OptsVirtualLines
 ---@field only_current_line boolean Only render for current line
 ---@field highlight_whole_line boolean Highlight empty space to the left of a diagnostic
+---@field show_delay number Delay before showing virtual lines
+---@field short_diagnostic boolean Only render the first line of a diagnostic
 
 -- Registers a wrapper-handler to render lsp lines.
 -- This should usually only be called once, during initialisation.
@@ -42,15 +44,29 @@ M.setup = function()
 
       vim.api.nvim_clear_autocmds({ group = "LspLines" })
       if opts.virtual_lines.only_current_line then
+        local show = function()
+          if Timer then
+            Timer:stop()
+          end
+          -- this is a hack, for some reason it fixes the missing virtual lines
+          if #diagnostics > 0 then
+            Timer = vim.defer_fn(function()
+              render_current_line(diagnostics, ns.user_data.virt_lines_ns, bufnr, opts)
+            end, opts.virtual_lines.show_delay or 300)
+          end
+        end
+
+        Timer = nil
         vim.api.nvim_create_autocmd("CursorMoved", {
           buffer = bufnr,
           callback = function()
-            render_current_line(diagnostics, ns.user_data.virt_lines_ns, bufnr, opts)
+            vim.diagnostic.config({ virtual_text = false })
+            show()
           end,
           group = "LspLines",
         })
         -- Also show diagnostics for the current line before the first CursorMoved event
-        render_current_line(diagnostics, ns.user_data.virt_lines_ns, bufnr, opts)
+        show()
       else
         render.show(ns.user_data.virt_lines_ns, bufnr, diagnostics, opts)
       end
