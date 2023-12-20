@@ -103,6 +103,62 @@ function M.show(namespace, bufnr, diagnostics, opts, source)
   end
   local highlight_groups = HIGHLIGHTS[source or "native"]
 
+  if opts.virtual_lines.single_line then
+    local error_count = {}
+
+    for _, diagnostic in ipairs(diagnostics) do
+        local severity_level = diagnostic.severity
+        if error_count[diagnostic.lnum] == nil then
+            error_count[diagnostic.lnum] = {}
+        end
+
+        if error_count[diagnostic.lnum][severity_level] == nil then
+            error_count[diagnostic.lnum][severity_level] = 1
+        else
+            error_count[diagnostic.lnum][severity_level] = error_count[diagnostic.lnum][severity_level] + 1
+        end
+    end
+
+    for lnum, severity_levels in pairs(error_count) do
+        local line_length = #(vim.api.nvim_buf_get_lines(bufnr, lnum, lnum + 1, false)[1])
+        local diagnostic_col = 0 -- Adjust this to your preferred column
+        local virt_text = {}
+
+        for severity_level, count in pairs(severity_levels) do
+            local severity_label = ""
+            if severity_level == vim.diagnostic.severity.ERROR then
+                severity_label = "Error"
+            elseif severity_level == vim.diagnostic.severity.WARN then
+                severity_label = "Warn"
+            elseif severity_level == vim.diagnostic.severity.INFO then
+                severity_label = "Info"
+            elseif severity_level == vim.diagnostic.severity.HINT then
+                severity_label = "Hint"
+            end
+
+            local severity_sign = vim.fn.sign_getdefined("DiagnosticSign" .. severity_label)[1]
+        vim.print(severity_sign)
+            local severity_text =  severity_sign.text .. count
+            table.insert(virt_text, { " " .. severity_text, highlight_groups[severity_level] })
+        end
+
+        vim.api.nvim_buf_set_extmark(
+            bufnr,
+            namespace,
+            lnum,
+            diagnostic_col,
+            { virt_text = virt_text }
+        )
+    end
+
+    return
+end
+ 
+
+
+
+
+
   -- This loop reads line by line, and puts them into stacks with some
   -- extra data, since rendering each line will require understanding what
   -- is beneath it.
@@ -111,27 +167,28 @@ function M.show(namespace, bufnr, diagnostics, opts, source)
   local prev_col = 0
 
   for _, diagnostic in ipairs(diagnostics) do
-    local line_length = #(vim.api.nvim_buf_get_lines(bufnr, diagnostic.lnum, diagnostic.lnum + 1, false)[1])
-    -- for single line diagnostics, we can just render them as a single line
-    if line_length + #diagnostic.message < 118 or opts.virtual_lines.single_line then
-      local msg;
-      if diagnostic.code then
-        msg = string.format("%s [%s]", diagnostic.message, diagnostic.code)
-      else
-        msg = diagnostic.message
-      end
 
-      local col = math.min(diagnostic.col, line_length)
-
-      vim.api.nvim_buf_set_extmark(
-        bufnr,
-        namespace,
-        diagnostic.lnum,
-        col,
-        { virt_text = { { "     " .. msg, highlight_groups[diagnostic.severity] } } }
-      )
-      goto skip
-    end
+    -- -- for single line diagnostics, we can just render them as a single line
+    -- local line_length = #(vim.api.nvim_buf_get_lines(bufnr, diagnostic.lnum, diagnostic.lnum + 1, false)[1])
+    -- if line_length + #diagnostic.message < 118 or opts.virtual_lines.single_line then
+    --   local msg;
+    --   if diagnostic.code then
+    --     msg = string.format("%s [%s]", diagnostic.message, diagnostic.code)
+    --   else
+    --     msg = diagnostic.message
+    --   end
+    --
+    --   local col = math.min(diagnostic.col, line_length)
+    --
+    --   vim.api.nvim_buf_set_extmark(
+    --     bufnr,
+    --     namespace,
+    --     diagnostic.lnum,
+    --     col,
+    --     { virt_text = { { "     " .. msg, highlight_groups[diagnostic.severity] } } }
+    --   )
+    --   goto skip
+    -- end
 
     if line_stacks[diagnostic.lnum] == nil then
       line_stacks[diagnostic.lnum] = {}
