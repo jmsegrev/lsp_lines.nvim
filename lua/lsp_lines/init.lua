@@ -24,6 +24,7 @@ end
 ---@field only_current_line boolean Only render for current line
 ---@field highlight_whole_line boolean Highlight empty space to the left of a diagnostic
 ---@field single_line boolean Only render in a single line current line
+---@field short_diagnostic boolean Only show first line of a diagnostic
 
 -- Registers a wrapper-handler to render lsp lines.
 -- This should usually only be called once, during initialisation.
@@ -66,6 +67,8 @@ M.setup = function()
       end
     end,
   }
+
+
 end
 
 ---@return boolean

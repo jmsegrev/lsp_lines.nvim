@@ -39,6 +39,36 @@ local function distance_between_cols(bufnr, lnum, start_col, end_col)
   return vim.fn.strdisplaywidth(sub, 0) -- these are indexed starting at 0
 end
 
+local function splitStringIntoLines(str, maxLineLength)
+    local lines = {}
+    local line = ""
+
+    for word in str:gmatch("%S+") do
+        if #line + #word <= maxLineLength then
+            line = line .. word .. " "
+        else
+            if #line > 0 then
+                table.insert(lines, line)
+            end
+            line = word .. " "
+        end
+    end
+
+    if #line > 0 then
+        table.insert(lines, line)
+    end
+
+    return table.concat(lines, "\n")
+end
+
+local function gmatch_to_table(input_string, pattern)
+    local results = {}
+    for match in input_string:gmatch(pattern) do
+        table.insert(results, match)
+    end
+    return results
+end
+
 ---@param namespace number
 ---@param bufnr number
 ---@param diagnostics table
@@ -81,21 +111,24 @@ function M.show(namespace, bufnr, diagnostics, opts, source)
   local prev_col = 0
 
   for _, diagnostic in ipairs(diagnostics) do
-    local bfrline = vim.api.nvim_buf_get_lines(bufnr, diagnostic.lnum, diagnostic.lnum + 1, false)[1]
-    if #bfrline + #diagnostic.message < 100 or opts.virtual_lines.single_line then
-
+    local line_length = #(vim.api.nvim_buf_get_lines(bufnr, diagnostic.lnum, diagnostic.lnum + 1, false)[1])
+    -- for single line diagnostics, we can just render them as a single line
+    if line_length + #diagnostic.message < 118 or opts.virtual_lines.single_line then
       local msg;
       if diagnostic.code then
         msg = string.format("%s [%s]", diagnostic.message, diagnostic.code)
       else
         msg = diagnostic.message
       end
+
+      local col = math.min(diagnostic.col, line_length)
+
       vim.api.nvim_buf_set_extmark(
         bufnr,
         namespace,
         diagnostic.lnum,
-        diagnostic.col,
-        { virt_text = { { "──── " .. msg, highlight_groups[diagnostic.severity] } } }
+        col,
+        { virt_text = { { "     " .. msg, highlight_groups[diagnostic.severity] } } }
       )
       goto skip
     end
@@ -208,7 +241,9 @@ function M.show(namespace, bufnr, diagnostics, opts, source)
           msg = diagnostic.message
         end
 
-        for msg_line in msg:gmatch("([^\n]+)") do
+        local msg_lines = gmatch_to_table(msg, "([^\n]+)")
+
+        for _, msg_line in ipairs(msg_lines) do
           local create_line = function(message)
             local line = {}
             vim.list_extend(line, left)
@@ -225,16 +260,23 @@ function M.show(namespace, bufnr, diagnostics, opts, source)
           msg_line = msg_line:match("^%s*(.-)%s*$")
           -- vim.list_extend(vline, { { msg_line, highlight_groups[diagnostic.severity] } })
           -- table.insert(virt_lines, vline)
-          if #msg_line < 80 then
+          if #msg_line < 118 then
             table.insert(virt_lines, create_line(msg_line))
           else
+            local has_matches = false
+            -- split message by single quotes to make it readable
             for msg_part in msg_line:gmatch("(.-)'") do
+              has_matches = true
               table.insert(virt_lines, create_line(msg_part:match("^%s*(.-)%s*$")))
             end
-            if opts.virtual_lines.short_diagnostic then
+
+            -- no matches found for code, print the whole line
+            if not has_matches then
+              table.insert(virt_lines, create_line(msg_line))
+            end
+
+            if #msg_lines > 1 and opts.virtual_lines.short_diagnostic then
               table.insert(virt_lines, create_line("..."))
-            else
-              table.insert(virt_lines, create_line("-"))
             end
           end
 
