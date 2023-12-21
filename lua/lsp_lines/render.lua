@@ -137,7 +137,6 @@ function M.show(namespace, bufnr, diagnostics, opts, source)
             end
 
             local severity_sign = vim.fn.sign_getdefined("DiagnosticSign" .. severity_label)[1]
-        vim.print(severity_sign)
             local severity_text =  severity_sign.text .. count
             table.insert(virt_text, { " " .. severity_text, highlight_groups[severity_level] })
         end
